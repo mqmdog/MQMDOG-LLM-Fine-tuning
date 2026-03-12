@@ -1,0 +1,54 @@
+# ============================================================================
+# QLoRA 微调配置 - 资源受限场景下的高效微调
+# 技术要点: 4bit量化 + LoRA, 大幅降低显存需求 (可在单张消费级GPU上微调7B模型)，面试要点: QLoRA三大核心: NF4量化、双重量化、分页优化器
+# ============================================================================
+
+model:
+  model_name_or_path: "Qwen/Qwen2.5-0.5B-Instruct"
+  model_type: "causal_lm"
+  torch_dtype: "bf16"
+  trust_remote_code: true
+
+tokenizer:
+  max_length: 1024
+  padding: "longest"
+
+data:
+  dataset_name: "tatsu-lab/alpaca"
+  template: "alpaca"
+  max_samples: 10000
+
+training:
+  output_dir: "outputs/models/qlora-chat"
+  num_epochs: 3
+  per_device_train_batch_size: 4
+  gradient_accumulation_steps: 4
+  learning_rate: 2.0e-4
+  lr_scheduler_type: "cosine"
+  warmup_ratio: 0.1
+  # QLoRA推荐使用bf16而非fp16 (fp16可能导致NaN)
+  bf16: true
+  gradient_checkpointing: true
+  logging_steps: 10
+  save_steps: 200
+  eval_steps: 200
+  # 使用分页优化器, 当GPU显存不足时自动将优化器状态卸载到CPU
+  optim: "paged_adamw_32bit"
+
+finetuning:
+  method: "qlora"
+  qlora:
+    r: 16
+    lora_alpha: 32
+    lora_dropout: 0.05
+    target_modules: ["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"]
+    bias: "none"
+    task_type: "CAUSAL_LM"
+    bits: 4
+    quant_type: "nf4"
+    double_quant: true
+    compute_dtype: "bf16"
+
+logging:
+  log_dir: "outputs/logs/qlora-chat"
+  use_tensorboard: true

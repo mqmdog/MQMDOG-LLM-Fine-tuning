@@ -1,0 +1,42 @@
+# ============================================================================
+# 全参数微调配置
+# 技术要点: 更新模型所有参数, 效果最佳但资源消耗最大， 全参数微调存在灾难性遗忘风险, 需要合理设置学习率和正则化
+# ============================================================================
+
+model:
+  model_name_or_path: "Qwen/Qwen2.5-0.5B-Instruct"
+  model_type: "causal_lm"
+  torch_dtype: "bf16"
+  trust_remote_code: true
+
+tokenizer:
+  max_length: 512
+  padding: "longest"
+
+data:
+  dataset_name: "tatsu-lab/alpaca"
+  template: "alpaca"
+  max_samples: 5000
+
+training:
+  output_dir: "outputs/models/full-finetune"
+  num_epochs: 3
+  per_device_train_batch_size: 2
+  gradient_accumulation_steps: 8
+  # 全参数微调使用较小学习率, 避免破坏预训练知识
+  learning_rate: 2.0e-5
+  weight_decay: 0.01
+  lr_scheduler_type: "cosine"
+  warmup_ratio: 0.1
+  bf16: true
+  gradient_checkpointing: true
+  logging_steps: 10
+  save_steps: 500
+  eval_steps: 500
+
+finetuning:
+  method: "full"
+
+logging:
+  log_dir: "outputs/logs/full-finetune"
+  use_tensorboard: true

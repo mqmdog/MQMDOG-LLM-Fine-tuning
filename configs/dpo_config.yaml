@@ -1,0 +1,59 @@
+# ============================================================================
+# DPO (Direct Preference Optimization) 对齐微调配置
+# 技术要点: 直接从偏好数据学习, 无需训练奖励模型 (相比RLHF更简单高效)， DPO将RLHF的RM+PPO简化为一个分类损失, 理论上等价但训练更稳定
+# ============================================================================
+
+model:
+  model_name_or_path: "Qwen/Qwen2.5-0.5B-Instruct"
+  # DPO需要一个参考模型来计算KL散度
+  ref_model_name_or_path: "Qwen/Qwen2.5-0.5B-Instruct"
+  model_type: "causal_lm"
+  torch_dtype: "bf16"
+  trust_remote_code: true
+
+tokenizer:
+  max_length: 1024
+  padding: "max_length"
+
+data:
+  # DPO数据格式: (prompt, chosen_response, rejected_response)
+  dataset_name: "Anthropic/hh-rlhf"
+  template: "dpo"
+  max_samples: 5000
+
+training:
+  output_dir: "outputs/models/dpo-alignment"
+  num_epochs: 1
+  per_device_train_batch_size: 2
+  gradient_accumulation_steps: 8
+  learning_rate: 5.0e-7
+  lr_scheduler_type: "cosine"
+  warmup_ratio: 0.1
+  bf16: true
+  gradient_checkpointing: true
+  logging_steps: 10
+  save_steps: 200
+  eval_steps: 200
+
+# DPO特定配置
+dpo:
+  # DPO温度参数beta, 控制偏好与参考模型的偏离程度
+  beta: 0.1
+  # 损失类型: "sigmoid" (标准DPO), "ipo" (IPO变体)
+  loss_type: "sigmoid"
+  # 标签平滑系数
+  label_smoothing: 0.0
+
+finetuning:
+  method: "lora"
+  lora:
+    r: 16
+    lora_alpha: 32
+    lora_dropout: 0.05
+    target_modules: ["q_proj", "k_proj", "v_proj", "o_proj"]
+    bias: "none"
+    task_type: "CAUSAL_LM"
+
+logging:
+  log_dir: "outputs/logs/dpo-alignment"
+  use_tensorboard: true

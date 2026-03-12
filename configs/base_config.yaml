@@ -1,0 +1,168 @@
+# ============================================================================
+# LLM Fine-tuning 基础配置文件
+# 说明: 定义所有微调任务共享的默认参数, 具体任务配置可继承并覆盖
+# ============================================================================
+
+# --- 模型配置 ---
+model:
+  # 预训练模型名称或本地路径 (支持 HuggingFace Hub 上的模型标识符)
+  model_name_or_path: "Qwen/Qwen2.5-0.5B"
+  # 模型类型: causal_lm (自回归生成), seq2seq (编码器-解码器)
+  model_type: "causal_lm"
+  # 计算精度: fp32, fp16, bf16 (bf16需要Ampere及以上GPU)
+  torch_dtype: "bf16"
+  # 是否信任远程代码 (部分模型需要)
+  trust_remote_code: true
+  # 是否使用Flash Attention 2加速 (需要安装flash-attn)
+  use_flash_attention: false
+
+# --- Tokenizer配置 ---
+tokenizer:
+  # 默认与model_name_or_path一致, 也可单独指定
+  tokenizer_name_or_path: null
+  # 最大序列长度 (根据GPU显存和任务需要调整)
+  max_length: 512
+  # 填充策略: "longest" (按batch最长填充), "max_length" (填充到max_length)
+  padding: "longest"
+  # 是否截断超长序列
+  truncation: true
+
+# --- 数据配置 ---
+data:
+  # 数据集名称 (HuggingFace Hub) 或本地路径
+  dataset_name: null
+  dataset_path: null
+  # 数据集划分比例
+  train_split: "train"
+  eval_split: "validation"
+  test_split: "test"
+  # 训练/验证集划分比例 (当数据集没有预定义划分时使用)
+  train_val_split_ratio: 0.9
+  # 数据预处理参数
+  preprocessing:
+    # 数据加载时使用的进程数
+    num_workers: 4
+    # 是否对数据进行shuffle
+    shuffle: true
+    # 随机种子
+    seed: 42
+
+# --- 训练配置 ---
+training:
+  # 输出目录
+  output_dir: "outputs/models"
+  # 训练轮数
+  num_epochs: 3
+  # 每设备训练批大小
+  per_device_train_batch_size: 4
+  # 每设备评估批大小
+  per_device_eval_batch_size: 8
+  # 梯度累积步数 (有效batch_size = per_device_batch * gradient_accumulation * num_gpus)
+  gradient_accumulation_steps: 4
+  # 学习率
+  learning_rate: 2.0e-5
+  # 权重衰减 (L2正则化)
+  weight_decay: 0.01
+  # 梯度裁剪最大范数 (防止梯度爆炸)
+  max_grad_norm: 1.0
+  # 预热步数或比例
+  warmup_steps: 100
+  warmup_ratio: 0.1
+  # 学习率调度器: linear, cosine, cosine_with_restarts, polynomial, constant
+  lr_scheduler_type: "cosine"
+  # 日志记录间隔
+  logging_steps: 10
+  # 保存检查点间隔
+  save_steps: 500
+  # 评估间隔
+  eval_steps: 500
+  # 最大保存检查点数
+  save_total_limit: 3
+  # 是否使用混合精度训练: no, fp16, bf16
+  fp16: false
+  bf16: true
+  # 梯度检查点 (以计算换显存, 减少约30%显存占用)
+  gradient_checkpointing: true
+  # DeepSpeed配置文件路径
+  deepspeed: null
+  # 随机种子
+  seed: 42
+  # 评估策略: "steps", "epoch", "no"
+  evaluation_strategy: "steps"
+  # 最佳模型选择指标
+  metric_for_best_model: "eval_loss"
+  # 是否取指标越大越好
+  greater_is_better: false
+  # 是否加载最佳模型
+  load_best_model_at_end: true
+  # 数据加载进程数
+  dataloader_num_workers: 4
+
+# --- 微调方法配置 ---
+finetuning:
+  # 微调方法: full, lora, qlora, adalora, prefix_tuning, prompt_tuning, ia3
+  method: "lora"
+
+  # LoRA 参数
+  lora:
+    r: 16                    # LoRA秩 (低秩矩阵的维度, 越大表达能力越强但参数越多)
+    lora_alpha: 32           # 缩放因子 (通常设为 2*r)
+    lora_dropout: 0.05       # Dropout概率
+    target_modules: null     # 目标模块 (null表示自动检测, 也可指定如 ["q_proj", "v_proj"])
+    bias: "none"             # 偏置处理: "none", "all", "lora_only"
+    task_type: "CAUSAL_LM"   # 任务类型: CAUSAL_LM, SEQ_2_SEQ_LM, TOKEN_CLS, SEQ_CLS
+
+  # QLoRA 参数 (在LoRA基础上增加量化)
+  qlora:
+    r: 16
+    lora_alpha: 32
+    lora_dropout: 0.05
+    target_modules: null
+    bias: "none"
+    task_type: "CAUSAL_LM"
+    # 量化配置
+    bits: 4                       # 量化位数: 4 或 8
+    quant_type: "nf4"             # 量化类型: "nf4" (NormalFloat4) 或 "fp4"
+    double_quant: true            # 是否使用双重量化 (进一步压缩量化常数)
+    compute_dtype: "bf16"         # 计算时的数据类型
+
+  # AdaLoRA 参数 (自适应分配LoRA秩)
+  adalora:
+    init_r: 12               # 初始秩
+    target_r: 8              # 目标秩
+    beta1: 0.85
+    beta2: 0.85
+    tinit: 200               # 预热步数
+    tfinal: 1000             # 最终步数
+    deltaT: 10               # 更新间隔
+    lora_alpha: 32
+    lora_dropout: 0.05
+    target_modules: null
+    task_type: "CAUSAL_LM"
+
+  # Prefix Tuning 参数
+  prefix_tuning:
+    num_virtual_tokens: 20    # 虚拟token数量
+    prefix_projection: true   # 是否使用MLP投影层 (提升稳定性)
+    task_type: "CAUSAL_LM"
+
+  # Prompt Tuning 参数
+  prompt_tuning:
+    num_virtual_tokens: 20
+    # 初始化方式: "RANDOM", "TEXT" (使用文本初始化)
+    prompt_tuning_init: "TEXT"
+    prompt_tuning_init_text: "Classify if the text is positive or negative:"
+    task_type: "CAUSAL_LM"
+
+# --- 日志与监控 ---
+logging:
+  # 日志目录
+  log_dir: "outputs/logs"
+  # 日志级别: DEBUG, INFO, WARNING, ERROR
+  log_level: "INFO"
+  # 是否使用TensorBoard
+  use_tensorboard: true
+  # 是否使用Weights & Biases
+  use_wandb: false
+  wandb_project: "llm-finetuning"
+  wandb_run_name: null
